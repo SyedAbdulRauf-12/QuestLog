@@ -5,29 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/lib/supabaseClient";
-import { Send, Bot, User as UserIcon, CheckCircle2, Bug } from "lucide-react";
-
-// --- CONFIGURATION ---
-const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""; 
-
-const HABIT_GENERATION_SCHEMA = {
-    type: "ARRAY",
-    items: {
-        type: "OBJECT",
-        properties: {
-            title: { type: "STRING" }, 
-            task_type: { type: "STRING" }, 
-            xp: { type: "NUMBER" },
-        },
-        required: ["title", "task_type", "xp"]
-    }
-};
+import { Send, Bot, User as UserIcon, CheckCircle2 } from "lucide-react";
+import { generateHabitPlan } from "./actions";
 
 type Message = {
   id: string;
   role: "user" | "ai";
   content: string;
   isPlan?: boolean; 
+  // We store the parsed data in the message state so we don't have to re-parse it
+  planData?: {
+      quest_title: string;
+      tasks: GeneratedTask[];
+  };
 };
 
 type GeneratedTask = {
@@ -36,11 +26,11 @@ type GeneratedTask = {
   xp: number;
 };
 
-// --- FIX: Define interface for Google API Model to avoid 'any' ---
-interface GeminiModel {
-  name: string;
-  supportedGenerationMethods?: string[];
-}
+// Response structure from Server Action
+type AIResponse = {
+    quest_title: string;
+    tasks: GeneratedTask[];
+};
 
 export default function PlannerPage() {
   const [input, setInput] = useState("");
@@ -63,100 +53,6 @@ export default function PlannerPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // --- DYNAMIC MODEL RESOLUTION ---
-  // This function asks Google: "What models can I use?" and picks the best one.
-  const resolveModel = async () => {
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
-      if (!response.ok) throw new Error(`Failed to list models: ${response.status}`);
-      
-      const data = await response.json();
-      // FIX: Type cast the response data
-      const models = (data.models || []) as GeminiModel[];
-      
-      // Priority list: Flash (fastest) -> Pro (smartest) -> standard 1.0
-      const preferredModels = [
-        "models/gemini-1.5-flash",
-        "models/gemini-1.5-flash-001",
-        "models/gemini-1.5-pro",
-        "models/gemini-pro"
-      ];
-
-      // Find the first preferred model that exists in the user's available list
-      for (const pref of preferredModels) {
-        // FIX: Removed (m: any), typescript now infers m is GeminiModel
-        if (models.some((m) => m.name === pref)) {
-          console.log(`Selected Model: ${pref}`);
-          return pref.replace("models/", ""); // Remove prefix for the URL construction
-        }
-      }
-      
-      // Fallback: Just grab the first model that supports generation
-      // FIX: Removed (m: any)
-      const fallback = models.find((m) => m.supportedGenerationMethods?.includes("generateContent"));
-      if (fallback) {
-         console.log(`Fallback Model: ${fallback.name}`);
-         return fallback.name.replace("models/", "");
-      }
-
-      throw new Error("No compatible Gemini models found for this API Key.");
-    } catch (e) {
-      console.error("Model Resolution Error:", e);
-      return "gemini-pro"; // Ultimate fallback
-    }
-  };
-
-  const callGemini = async (prompt: string) => {
-    if (!API_KEY) {
-      console.error("API Key missing.");
-      return null;
-    }
-
-    // 1. Dynamically find the correct model name
-    const modelName = await resolveModel();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
-
-    const fullPrompt = `
-      SYSTEM INSTRUCTION: You are an expert habit coach. Break down the user's goal into 5-7 actionable tasks (daily/weekly/milestone). 
-      Return ONLY the raw JSON array following this schema: ${JSON.stringify(HABIT_GENERATION_SCHEMA)}. 
-      Do not include markdown formatting like \`\`\`json.
-      
-      USER GOAL: ${prompt}
-    `;
-    
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: { 
-              responseMimeType: "application/json" 
-          }
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.error("Gemini API Error Details:", errorData);
-        throw new Error(`Gemini API Error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      let text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
-      if (!text) throw new Error("Empty response from AI");
-
-      // Sanitize: Remove markdown code blocks if present
-      text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      
-      return text;
-    } catch (e) {
-      console.error("Full Error Object:", e);
-      return null;
-    }
-  };
-
   const handleSend = async () => {
     if (!input.trim()) return;
     
@@ -165,49 +61,68 @@ export default function PlannerPage() {
     setInput("");
     setIsLoading(true);
 
-    const planJson = await callGemini(input);
+    const result = await generateHabitPlan(input);
     setIsLoading(false);
 
-    if (planJson) {
+    if (result.success && result.data) {
       try {
-          // Validate JSON before adding message
-          JSON.parse(planJson);
+          const parsedData: AIResponse = JSON.parse(result.data);
+          
           const aiMsg: Message = { 
             id: (Date.now() + 1).toString(), 
             role: "ai", 
-            content: planJson, 
-            isPlan: true 
+            content: "Plan generated.", // Fallback text
+            isPlan: true,
+            planData: parsedData // Store the full object
           };
           setMessages(prev => [...prev, aiMsg]);
       } catch (e) {
-          console.error("Failed to parse JSON from AI:", planJson);
-          setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", content: "I came up with a plan, but it wasn't formatted correctly. Let's try again. (Check console for raw output)" }]);
+          console.error("Failed to parse JSON:", e);
+          setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", content: "I created a plan, but it wasn't formatted correctly. Please try again." }]);
       }
     } else {
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", content: "Sorry, I couldn't connect to the AI. Please check the browser console (F12) for the specific error." }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", content: result.error || "Sorry, something went wrong." }]);
     }
   };
 
-  const handleAcceptPlan = async (planJson: string) => {
+  const handleAcceptPlan = async (planData: AIResponse) => {
     if (!userId) return;
+    
     try {
-      const tasks: GeneratedTask[] = JSON.parse(planJson);
-      
-      const dbTasks = tasks.map((t) => ({
+      // 1. Create the Quest with the AI-generated title
+      const { data: questData, error: questError } = await supabase
+        .from('quests')
+        .insert({
+            user_id: userId,
+            title: planData.quest_title, // Use the short title
+            is_active: true
+        })
+        .select()
+        .single();
+
+      if (questError) throw questError;
+      const questId = questData.id;
+
+      // 2. Prepare Tasks
+      const dbTasks = planData.tasks.map((t) => ({
         user_id: userId,
         title: t.title,
         task_type: t.task_type,
         xp: t.xp,
-        is_complete: false
+        is_complete: false,
+        quest_id: questId
       }));
 
-      const { error } = await supabase.from('tasks').insert(dbTasks);
+      // 3. Insert Tasks
+      const { error: tasksError } = await supabase.from('tasks').insert(dbTasks);
       
-      if (!error) {
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", content: "Awesome! I've added those quests to your Dashboard." }]);
+      if (!tasksError) {
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", content: `Awesome! I've added the "${planData.quest_title}" quest to your Dashboard.` }]);
+      } else {
+        throw tasksError;
       }
     } catch (e) {
-      console.error("Error saving plan", e);
+      console.error("Error saving quest:", e);
     }
   };
 
@@ -221,20 +136,31 @@ export default function PlannerPage() {
             </Avatar>
             
             <div className={`max-w-[80%] rounded-2xl p-4 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted/50"}`}>
-              {msg.isPlan ? (
+              {msg.isPlan && msg.planData ? (
                 <div className="space-y-3">
-                  <p className="font-semibold">Here is your custom roadmap:</p>
+                  {/* Display the AI-generated Title */}
+                  <div className="border-b pb-2 mb-2">
+                      <p className="text-xs text-muted-foreground uppercase font-bold">Quest Proposal</p>
+                      <h3 className="text-lg font-bold text-primary">{msg.planData.quest_title}</h3>
+                  </div>
+                  
                   <div className="space-y-2 text-sm">
-                    {(JSON.parse(msg.content) as GeneratedTask[]).map((task, i) => (
+                    {msg.planData.tasks.map((task, i) => (
                       <div key={i} className="flex items-center gap-2 bg-background/50 p-2 rounded">
-                        <span className="text-xs font-bold px-2 py-1 rounded bg-primary/10 text-primary">{task.task_type}</span>
+                        <span className="text-xs font-bold px-2 py-1 rounded bg-primary/10 text-primary whitespace-nowrap">
+                            {task.task_type}
+                        </span>
                         <span>{task.title}</span>
-                        <span className="text-xs text-muted-foreground ml-auto">+{task.xp}XP</span>
+                        <span className="text-xs text-muted-foreground ml-auto">+{task.xp}</span>
                       </div>
                     ))}
                   </div>
-                  <Button onClick={() => handleAcceptPlan(msg.content)} className="w-full mt-2" size="sm">
-                    <CheckCircle2 className="w-4 h-4 mr-2" /> Accept & Add to Dashboard
+                  <Button 
+                    onClick={() => msg.planData && handleAcceptPlan(msg.planData)} 
+                    className="w-full mt-2" 
+                    size="sm"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Accept Quest
                   </Button>
                 </div>
               ) : (

@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 export function UserNav() {
   const router = useRouter();
   const [email, setEmail] = useState("user@example.com");
-  const [name, setName] = useState("User"); // New state for name
+  const [name, setName] = useState("User"); 
   const [initials, setInitials] = useState("U");
 
   useEffect(() => {
@@ -28,13 +28,17 @@ export function UserNav() {
         const userEmail = data.user.email;
         setEmail(userEmail);
         
-        // Extract name (e.g. "john" from "john@email.com")
-        const extractedName = userEmail.split("@")[0];
-        // Capitalize first letter
-        setName(extractedName.charAt(0).toUpperCase() + extractedName.slice(1));
+        // Fetch display name from profile if set, otherwise fallback to email
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", data.user.id)
+            .single();
+
+        const displayName = profile?.display_name || userEmail.split("@")[0];
         
-        // Set initials (first 2 chars of email)
-        setInitials(userEmail.substring(0, 2).toUpperCase());
+        setName(displayName.charAt(0).toUpperCase() + displayName.slice(1));
+        setInitials(displayName.substring(0, 2).toUpperCase());
       }
     };
     fetchUser();
@@ -57,9 +61,7 @@ export function UserNav() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            {/* Use the real name state */}
             <p className="text-sm font-medium leading-none">{name}</p>
-            {/* Use the real email state */}
             <p className="text-xs leading-none text-muted-foreground">
               {email}
             </p>
@@ -67,8 +69,13 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>Profile</DropdownMenuItem>
-          <DropdownMenuItem>Settings</DropdownMenuItem>
+          {/* FIX: Added onClick to navigate */}
+          <DropdownMenuItem onClick={() => router.push("/dashboard/profile")}>
+            Profile
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+            Settings
+          </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>

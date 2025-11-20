@@ -1,93 +1,80 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
+import { RefreshCw, Plus, Lock, Sun, Trash2, FolderX, Award } from "lucide-react"; 
 
 type Task = {
-  id: number;
+  id: string; 
   title: string;
   task_type: string;
   xp: number;
   is_complete: boolean;
+  quest_id: string | null;
+};
+
+type Quest = {
+  id: string;
+  title: string;
+  created_at: string; 
 };
 
 export function TaskList({ user }: { user: User | null }) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [quests, setQuests] = useState<Quest[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("general");
   
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showDailyComplete, setShowDailyComplete] = useState(false);
 
-  // 1. Single Effect for Fetching
   useEffect(() => {
     if (!user) return;
 
-    const fetchTasks = async () => {
-      const { data, error } = await supabase
+    const fetchData = async () => {
+      const { data: questsData } = await supabase
+        .from("quests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (questsData) setQuests(questsData);
+
+      const { data: tasksData } = await supabase
         .from("tasks")
         .select("*")
         .eq("user_id", user.id)
         .order("is_complete", { ascending: true })
         .order("created_at", { ascending: false });
 
-      if (data) {
-        setTasks(data);
-      } else if (error) {
-        console.error("Error fetching tasks:", error);
-      }
+      if (tasksData) setTasks(tasksData as Task[]);
     };
 
-    fetchTasks();
-    // FIX: Added 'user' to dependency array to satisfy linter
-  }, [user, refreshTrigger]); 
-
-  // 2. Real-time Listener
-  useEffect(() => {
-    if (!user) return;
-
+    fetchData();
+    
     const channel = supabase
-      .channel(`tasks:${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "tasks",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          setRefreshTrigger((prev) => prev + 1);
-        }
-      )
+      .channel(`dashboard_updates:${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `user_id=eq.${user.id}` }, 
+          () => { fetchData(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "quests", filter: `user_id=eq.${user.id}` }, 
+          () => { fetchData(); })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // FIX: Added 'user' to dependency array
-  }, [user]); 
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim() || !user) return;
+    const currentQuestId = activeTab === "general" ? null : activeTab;
 
     const { error } = await supabase.from("tasks").insert({
       user_id: user.id,
@@ -95,18 +82,31 @@ export function TaskList({ user }: { user: User | null }) {
       task_type: "Daily",
       xp: 10,
       is_complete: false,
+      quest_id: currentQuestId
     });
 
     if (!error) {
       setNewTaskTitle("");
       setIsDialogOpen(false);
-    } else {
-      console.error("Error adding task:", error);
     }
   };
 
   const handleCompleteTask = async (task: Task) => {
     if (task.is_complete || !user) return;
+    
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_complete: true } : t));
+
+    if (task.task_type === 'Daily') {
+        const remainingDailies = tasks.filter(t => 
+            t.task_type === 'Daily' && 
+            !t.is_complete && 
+            t.id !== task.id
+        );
+        
+        if (remainingDailies.length === 0) {
+            setShowDailyComplete(true);
+        }
+    }
 
     const { error } = await supabase.rpc('complete_task_and_award_xp', {
       task_id_to_complete: task.id,
@@ -114,88 +114,237 @@ export function TaskList({ user }: { user: User | null }) {
     });
 
     if (error) {
-      console.error("Error completing task:", error);
+        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_complete: false } : t));
+        alert(`Error: ${error.message}`);
     }
   };
 
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Your Quests</CardTitle>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" disabled={!user}>Add Quest</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Add a New Quest</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">
-                  Task
-                </Label>
-                <Input
-                  id="name"
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="e.g. Meditate for 5 minutes"
-                  className="col-span-3"
-                />
-              </div>
-            </div>
-            <Button onClick={handleAddTask}>Create Quest</Button>
-          </DialogContent>
-        </Dialog>
-      </CardHeader>
-      <CardContent>
-        {tasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No active quests. Create one to start gaining XP!
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {tasks.map((task) => (
-              <li key={task.id} className="flex items-center gap-4">
-                <Checkbox
-                  id={`task-${task.id}`}
-                  checked={task.is_complete}
-                  onCheckedChange={() => handleCompleteTask(task)}
-                  disabled={task.is_complete}
-                />
+  const handleStartNewDay = async () => {
+    if (!user) return;
+    if (!confirm("Ready to reset all Daily tasks for a new day?")) return;
+
+    setTasks(prev => prev.map(t => t.task_type === 'Daily' ? { ...t, is_complete: false } : t));
+
+    await supabase
+      .from('tasks')
+      .update({ is_complete: false })
+      .eq('user_id', user.id)
+      .eq('task_type', 'Daily');
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+      if(!confirm("Delete this task?")) return;
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+      await supabase.from('tasks').delete().eq('id', taskId);
+  };
+
+  const handleDeleteQuest = async (questId: string) => {
+      if(!confirm("Are you sure? This will delete the Quest and ALL its tasks.")) return;
+      setQuests(prev => prev.filter(q => q.id !== questId));
+      setTasks(prev => prev.filter(t => t.quest_id !== questId));
+      setActiveTab("general");
+      await supabase.from('quests').delete().eq('id', questId);
+  };
+
+  const handleClearGeneral = async () => {
+      if(!confirm("Clear all tasks in the General tab?")) return;
+      setTasks(prev => prev.filter(t => t.quest_id !== null)); 
+      await supabase.from('tasks').delete().eq('user_id', user!.id).is('quest_id', null);
+  };
+
+  const isTaskLocked = (task: Task, questCreatedAt?: string) => {
+    if (!questCreatedAt) return false; 
+    const createdDate = new Date(questCreatedAt);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - createdDate.getTime());
+    const daysSinceStart = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+    if (task.task_type === 'Weekly' && daysSinceStart < 6) return true;
+    if (task.task_type === 'Milestone' && daysSinceStart < 10) return true;
+    return false;
+  };
+
+  const getLockMessage = (task: Task) => {
+    if (task.task_type === 'Weekly') return "Unlocks Day 6";
+    if (task.task_type === 'Milestone') return "Unlocks Day 10";
+    return "";
+  };
+
+  const renderTaskList = (questId: string | null) => {
+    let filteredTasks = tasks.filter(t => t.quest_id === questId);
+    
+    if (questId === null) {
+        filteredTasks = filteredTasks.filter(t => !t.is_complete);
+    }
+
+    const currentQuest = quests.find(q => q.id === questId);
+
+    if (filteredTasks.length === 0) {
+      return (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>No active tasks available.</p>
+        </div>
+      );
+    }
+
+    return (
+      <ul className="space-y-3 mt-4">
+        {filteredTasks.map((task) => {
+            const locked = isTaskLocked(task, currentQuest?.created_at);
+            
+            return (
+              <li key={task.id} className={`group flex items-center gap-4 p-3 rounded-lg border ${locked ? 'bg-muted/50 border-dashed' : 'bg-card hover:border-primary/50 transition-colors'}`}>
+                {locked ? (
+                    <div className="h-5 w-5 flex items-center justify-center text-muted-foreground" title={getLockMessage(task)}>
+                        <Lock className="h-4 w-4" />
+                    </div>
+                ) : (
+                    <Checkbox
+                      id={`task-${task.id}`}
+                      checked={task.is_complete}
+                      onCheckedChange={() => handleCompleteTask(task)}
+                      disabled={task.is_complete}
+                      className="h-5 w-5"
+                    />
+                )}
+
                 <div className="flex-1">
-                  <label
-                    htmlFor={`task-${task.id}`}
-                    className={`font-medium cursor-pointer ${
-                      task.is_complete
-                        ? "line-through text-muted-foreground"
-                        : ""
-                    }`}
-                  >
-                    {task.title}
-                  </label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge
-                      variant={
-                        task.task_type === "Daily"
-                          ? "default"
-                          : task.task_type === "Weekly"
-                          ? "secondary"
-                          : "destructive"
-                      }
+                  <div className="flex items-center gap-2">
+                    <label
+                        htmlFor={`task-${task.id}`}
+                        className={`font-medium ${task.is_complete ? "line-through text-muted-foreground" : ""} ${locked ? "text-muted-foreground" : ""}`}
                     >
+                        {task.title}
+                    </label>
+                    {locked && (
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground bg-muted px-1.5 rounded">
+                            {getLockMessage(task)}
+                        </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <Badge variant={task.task_type === 'Milestone' ? "destructive" : "secondary"} className="text-[10px] h-5 px-2">
                       {task.task_type}
                     </Badge>
-                    <span className="text-xs font-semibold text-primary">
+                    <span className="text-xs font-bold text-yellow-600 flex items-center gap-1">
                       +{task.xp} XP
                     </span>
                   </div>
                 </div>
+
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    onClick={() => handleDeleteTask(task.id)}
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
               </li>
+            );
+        })}
+      </ul>
+    );
+  };
+
+  return (
+    <Card className="min-h-[500px] flex flex-col">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="flex items-center gap-2">
+            Active Quests
+        </CardTitle>
+        <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleStartNewDay} title="Reset Daily Tasks">
+                <Sun className="w-4 h-4 mr-2 text-orange-500" /> New Day
+            </Button>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" disabled={!user}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Task
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Add Task</DialogTitle></DialogHeader>
+                <div className="grid gap-4 py-4">
+                   <Label>Task Title</Label>
+                   <Input value={newTaskTitle} onChange={(e) => setNewTaskTitle(e.target.value)} placeholder="Do the thing..." />
+                </div>
+                <Button onClick={handleAddTask}>Create</Button>
+              </DialogContent>
+            </Dialog>
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex-1">
+        <Tabs defaultValue="general" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="w-full justify-start overflow-x-auto flex-nowrap mb-4">
+            <TabsTrigger value="general">General</TabsTrigger>
+            {quests.map(quest => (
+                <TabsTrigger key={quest.id} value={quest.id} className="max-w-[200px] truncate">
+                    {quest.title}
+                </TabsTrigger>
             ))}
-          </ul>
-        )}
+          </TabsList>
+
+          <TabsContent value="general" className="space-y-4">
+            <div className="flex justify-between items-center mb-4 p-4 bg-muted/30 rounded-lg border border-dashed">
+                <div>
+                    <h3 className="font-semibold text-foreground">General Tasks</h3>
+                    <p className="text-xs text-muted-foreground">Loose tasks not tied to a specific quest.</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={handleClearGeneral} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                    <FolderX className="w-4 h-4 mr-2" /> Clear All
+                </Button>
+            </div>
+            {renderTaskList(null)}
+          </TabsContent>
+
+          {quests.map(quest => (
+            <TabsContent key={quest.id} value={quest.id} className="space-y-4">
+                <div className="flex justify-between items-center mb-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
+                    <div>
+                        <h3 className="font-semibold text-primary">{quest.title}</h3>
+                        <p className="text-xs text-muted-foreground">
+                            Started: {new Date(quest.created_at).toLocaleDateString()}
+                        </p>
+                    </div>
+                    <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => handleDeleteQuest(quest.id)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                        <Trash2 className="w-4 h-4 mr-2" /> Abandon Quest
+                    </Button>
+                </div>
+                {renderTaskList(quest.id)}
+            </TabsContent>
+          ))}
+        </Tabs>
       </CardContent>
+      
+      {/* DAILY COMPLETE MODAL */}
+      <Dialog open={showDailyComplete} onOpenChange={setShowDailyComplete}>
+        {/* FIX: Changed transparent bg to solid green-50 (light) and zinc-900 (dark) */}
+        <DialogContent className="sm:max-w-md text-center border-green-500 bg-green-50 dark:bg-zinc-900">
+          <DialogHeader>
+            <div className="mx-auto bg-green-100 p-3 rounded-full w-fit mb-4">
+                <Award className="h-8 w-8 text-green-600" />
+            </div>
+            <DialogTitle className="text-2xl text-center text-green-700 dark:text-green-400">Day Conquered!</DialogTitle>
+            <DialogDescription className="text-center text-lg font-medium text-foreground pt-2">
+              You have finished all your daily tasks.
+            </DialogDescription>
+            <p className="text-muted-foreground py-2">
+                Excellent consistency. Rest up and come back stronger tomorrow.
+            </p>
+          </DialogHeader>
+          <Button onClick={() => setShowDailyComplete(false)} className="w-full bg-green-600 hover:bg-green-700 text-white">
+            Huzzah!
+          </Button>
+        </DialogContent>
+      </Dialog>
+
     </Card>
   );
 }

@@ -8,10 +8,20 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Mail, HelpCircle, FileText } from "lucide-react";
+import { Mail, HelpCircle, FileText, RotateCcw } from "lucide-react"; // Added RotateCcw icon
 import Link from "next/link";
 
 export default function SettingsPage() {
+  
+  // New function to reset local storage
+  const handleResetOnboarding = () => {
+    localStorage.removeItem("hasSeenDisclaimer");
+    // Optional: Force reload to show it immediately, or just alert
+    if (confirm("Honor Code reset. Go to Dashboard to see it?")) {
+        window.location.href = "/dashboard";
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="space-y-2">
@@ -46,14 +56,21 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ACCOUNT SECTION (Placeholder for now) */}
+        {/* ACCOUNT SECTION */}
         <Card>
           <CardHeader>
-            <CardTitle>Account</CardTitle>
+            <CardTitle>Account & Preferences</CardTitle>
             <CardDescription>Manage your profile settings.</CardDescription>
           </CardHeader>
-          <CardContent>
-             <p className="text-sm text-muted-foreground mb-4">Logged in as User.</p>
+          <CardContent className="space-y-4">
+             <p className="text-sm text-muted-foreground">Logged in as User.</p>
+             
+             {/* NEW RESET BUTTON */}
+             <Button variant="outline" onClick={handleResetOnboarding} className="w-full justify-start gap-2">
+                <RotateCcw className="h-4 w-4" />
+                Reset Honor Code Popup
+             </Button>
+
              <Button variant="destructive" className="w-full">Delete Account</Button>
           </CardContent>
         </Card>
