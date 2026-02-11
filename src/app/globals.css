@@ -128,3 +128,17 @@
       -1px  1px 0 #000,
        1px  1px 0 #000;
   }
+  @layer utilities {
+  @keyframes zoom-in-out {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.15); /* Adjust this for more/less zoom */
+    }
+  }
+
+  .animate-zoom-pulse {
+    animation: zoom-in-out 1.8s ease-in-out infinite;
+  }
+}
