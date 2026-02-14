@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ export function UserNav() {
   const [email, setEmail] = useState("user@example.com");
   const [name, setName] = useState("User"); 
   const [initials, setInitials] = useState("U");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null); // New state
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -28,10 +29,10 @@ export function UserNav() {
         const userEmail = data.user.email;
         setEmail(userEmail);
         
-        // Fetch display name from profile if set, otherwise fallback to email
+        // Fetch display name AND avatar from profile
         const { data: profile } = await supabase
             .from("profiles")
-            .select("display_name")
+            .select("display_name, avatar_image")
             .eq("id", data.user.id)
             .single();
 
@@ -39,6 +40,11 @@ export function UserNav() {
         
         setName(displayName.charAt(0).toUpperCase() + displayName.slice(1));
         setInitials(displayName.substring(0, 2).toUpperCase());
+        
+        // Set avatar URL if it exists
+        if (profile?.avatar_image) {
+            setAvatarUrl(`/avatars/${profile.avatar_image}`);
+        }
       }
     };
     fetchUser();
@@ -53,7 +59,9 @@ export function UserNav() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-          <Avatar className="h-8 w-8">
+          <Avatar className="h-8 w-8 border border-white/10">
+            {/* FIX: Display the custom avatar if available */}
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={name} className="object-cover" />}
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
         </Button>
@@ -69,7 +77,6 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {/* FIX: Added onClick to navigate */}
           <DropdownMenuItem onClick={() => router.push("/dashboard/profile")}>
             Profile
           </DropdownMenuItem>

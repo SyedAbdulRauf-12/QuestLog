@@ -1,153 +1,153 @@
 "use server";
 
-// Trim the key to avoid copy-paste whitespace issues
 const API_KEY = process.env.GEMINI_API_KEY?.trim();
 
-const HABIT_GENERATION_SCHEMA = {
-    type: "ARRAY",
-    items: {
-        type: "OBJECT",
-        properties: {
-            title: { type: "STRING" }, 
-            task_type: { type: "STRING" }, 
-            xp: { type: "NUMBER" },
-        },
-        required: ["title", "task_type", "xp"]
+// --- NEW FLEXIBLE SCHEMA ---
+const INTERACTION_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    response_type: {
+      type: "STRING",
+      enum: ["clarification", "plan", "refusal"],
+      description: "Set to 'clarification' if details are missing. 'plan' if actionable. 'refusal' if impossible/unrealistic."
+    },
+    chat_message: {
+      type: "STRING",
+      description: "The text response to show the user. Be helpful and encouraging."
+    },
+    suggested_replies: {
+      type: "ARRAY",
+      items: { type: "STRING" },
+      description: "2-4 short, likely user responses (e.g. '30 Days', 'High Intensity', 'Just starting')."
+    },
+    plan_data: {
+      type: "OBJECT",
+      description: "Required ONLY if response_type is 'plan'.",
+      properties: {
+        quest_title: { type: "STRING" },
+        tasks: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              title: { type: "STRING", description: "Specific, actionable task instruction." },
+              task_type: { type: "STRING", enum: ["Daily", "Weekly", "Milestone"] },
+              xp: { type: "NUMBER" },
+            },
+            required: ["title", "task_type", "xp"]
+          }
+        }
+      },
+      required: ["quest_title", "tasks"]
     }
+  },
+  required: ["response_type", "chat_message"]
 };
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-interface GeminiPart {
-  text: string;
-}
-
-interface GeminiContent {
-  parts: GeminiPart[];
-}
 
 interface GeminiGenerationConfig {
   responseMimeType?: string;
 }
 
 interface GeminiRequestBody {
-  contents: GeminiContent[];
+  contents: { parts: { text: string }[] }[];
   generationConfig?: GeminiGenerationConfig;
 }
 
 interface GeminiModel {
-    name: string;
-    supportedGenerationMethods?: string[];
+  name: string;
+  supportedGenerationMethods?: string[];
 }
 
 interface GeminiModelListResponse {
-    models?: GeminiModel[];
-    error?: {
-        code: number;
-        message: string;
-        status: string;
-    };
+  models?: GeminiModel[];
+  error?: {
+    code: number;
+    message: string;
+    status: string;
+  };
 }
 
 // --- DIAGNOSTIC FUNCTION ---
 async function debugListModels() {
-  if (!API_KEY) return;
+  if (!API_KEY) return [];
   try {
-    console.log("SERVER DIAGNOSTIC: Checking available models...");
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
     const data = (await response.json()) as GeminiModelListResponse;
-    
-    if (data.error) {
-      console.error("SERVER DIAGNOSTIC ERROR:", JSON.stringify(data.error, null, 2));
-      return [];
-    }
-    
-    const modelNames = (data.models || []).map((m) => m.name);
-    console.log("SERVER DIAGNOSTIC SUCCESS. Found models:", modelNames.length);
-    return modelNames;
+    return (data.models || []).map((m) => m.name);
   } catch (e) {
-    console.error("SERVER DIAGNOSTIC FAILED:", e);
     return [];
   }
 }
 
-export async function generateHabitPlan(userPrompt: string) {
+// --- MAIN ACTION ---
+export async function generateAIResponse(history: { role: string, content: string }[]) {
   if (!API_KEY) {
-    console.error("SERVER ERROR: GEMINI_API_KEY is not found in process.env");
-    return { error: "Server Error: API Key not configured (Check terminal logs)." };
+    return { error: "Server Error: API Key not configured." };
   }
 
-  // 1. RUN DIAGNOSTIC
+  // 1. Model Resolution
   const availableModels = await debugListModels();
-
-  // 2. DEFINE CANDIDATES (UPDATED for Gemini 2.0)
-  // We prioritize the newest 2.0 models.
   let modelCandidates = [
-    "gemini-2.0-flash",       // New Standard Fast Model
-    "gemini-2.0-flash-lite",  // Cost-effective/Fast fallback
-    "gemini-2.0-pro-exp",     // Experimental Pro (Smarter)
-    "gemini-1.5-flash",       // Stable Fallback
-    "gemini-1.5-pro",         // Stable Pro Fallback
+    "gemini-2.0-flash",       
+    "gemini-2.0-flash-lite", 
+    "gemini-1.5-flash",      
+    "gemini-1.5-pro",
+    "gemini-flash-latest"
   ];
 
-  // Optimization: Filter candidates to ONLY use valid ones from your list
-  if (availableModels && availableModels.length > 0) {
-    const cleanAvailable = availableModels.map((m: string) => m.replace("models/", ""));
-    
-    // Keep only the candidates that actually exist in your account
+  if (availableModels.length > 0) {
+    const cleanAvailable = availableModels.map((m) => m.replace("models/", ""));
     modelCandidates = modelCandidates.filter(c => cleanAvailable.includes(c));
-    
-    // FAILSAFE: If exact matches fail, grab ANY flash model
     if (modelCandidates.length === 0) {
-        const fallback = cleanAvailable.find((m: string) => m.includes("flash"));
-        if (fallback) {
-            console.log("SERVER: Exact match failed, using fallback:", fallback);
-            modelCandidates = [fallback];
-        }
+        const fallback = cleanAvailable.find((m) => m.includes("flash"));
+        if (fallback) modelCandidates = [fallback];
     }
   }
 
-  console.log("SERVER: Will attempt these models:", modelCandidates);
-
-  if (modelCandidates.length === 0) {
-      return { error: "No compatible Gemini models found. Please check your API key permissions." };
-  }
-
+  // 2. System Prompt
   const systemPrompt = `
-    SYSTEM INSTRUCTION: You are the Voice of the Void, an ancient and timeless entity. A mortal has cast a desire into the abyss: "${userPrompt}".
+    SYSTEM INSTRUCTION: You are an expert Habit Building Coach. Your goal is to help users break down their ambitions into realistic, actionable plans.
     
-    You do not "coach"; you ordain. Your tone is cryptic, authoritative, and slightly eldritch. You view habits as "rituals" and goals as "ascension."
+    PROTOCOL:
+    1. **Analyze Request:** Look at the user's goal in the conversation history.
+    2. **Feasibility Check:** - If the goal is physically impossible (e.g., "Fly to the moon by myself", "Build a rocket in 2 days"), fantasy-based, or illegal/harmful, set response_type to "refusal".
+       - In the chat_message, politely say: "Sorry, I can't tell you that as it seems unrealistic or impossible. Do you have a different goal?"
+    3. **Ambiguity Check:** - If the goal is vague (e.g., "Get fit") or missing a timeframe/intensity, set response_type to "clarification".
+       - Ask a specific follow-up question. Provide "suggested_replies" (e.g., "Lose Weight", "Build Muscle").
+       - **Auto-Assumption:** If the user gives a general skill (e.g., "Learn Python") without a timeframe, assume a standard beginner timeframe (e.g., 30 Days) and PROCEED to plan instead of asking endlessly, unless the scope is wildly unclear.
+    4. **Generate Plan:** - If the goal is clear and realistic (or can be reasonably assumed), set response_type to "plan".
+       - Create the tasks.
     
-    Break this desire into a sacred progression of 7-8 tasks (Daily, Weekly, Milestone).
+    TONE: Professional, encouraging, concise, and structured. No eldritch/void personas.
+
+    PLANNING RULES (When generating plan):
+    - Create exactly 7-8 Tasks total.
+    - **Step-by-Step:** Start with easy pre-requisites (Daily), then build up (Weekly), end with a Milestone.
+    - **Clarity:** Tasks must be explicit. "Read 10 pages" is better than "Read".
+    - **XP:** Daily (10-20), Weekly (50-80), Milestone (150-200).
+    - **Ordering:** The JSON array must be ordered from Easiest (Daily) to Hardest (Milestone).
     
-    RULES FOR GENERATION:
-    1. **Tone:** Use words like "Sanctify," "Ritual," "Offering," "Tribute," "Ascension." Be brief and commanding.
-    2. **Progression:** Start with simple rituals (Daily), move to trials (Weekly), and end with a great ascension (Milestone).
-    3. **Quantity:** Generate exactly 7 or 8 tasks.
-    4. **Types:** - 'Daily' (XP: 10-20)
-       - 'Weekly' (XP: 50-80)
-       - 'Milestone' (XP: 150-200)
-    5. **Ordering:** The JSON array must be ordered from Easiest (Daily) to Hardest (Milestone).
-    
-    Return ONLY the raw JSON array following this schema: ${JSON.stringify(HABIT_GENERATION_SCHEMA)}. 
-    Do not include markdown formatting like \`\`\`json. Ensure the output is valid JSON.
+    OUTPUT SCHEMA: ${JSON.stringify(INTERACTION_SCHEMA)}
   `;
 
+  // 3. Serialize History
+  const conversationText = history.map(msg => `${msg.role.toUpperCase()}: ${msg.content}`).join("\n");
+  const fullPrompt = `${systemPrompt}\n\nCURRENT CONVERSATION:\n${conversationText}\n\nCOACH RESPONSE (JSON):`;
+
+  // 4. Call API
   for (const model of modelCandidates) {
     let attempts = 0;
-    
     while (attempts < 2) {
       try {
-        console.log(`SERVER: Attempting model ${model} (Attempt ${attempts + 1})...`);
+        console.log(`SERVER: Attempting model ${model}...`);
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
+        const supportsJsonMode = model.includes("1.5") || model.includes("2.0") || model.includes("flash");
         
-        // Gemini 1.5 and 2.0 both support responseMimeType
-        const supportsJsonMode = true; 
-        
-        // FIX: Use the interface instead of 'any'
         const requestBody: GeminiRequestBody = {
-            contents: [{ parts: [{ text: systemPrompt }] }]
+            contents: [{ parts: [{ text: fullPrompt }] }]
         };
         
         if (supportsJsonMode) {
@@ -169,21 +169,13 @@ export async function generateHabitPlan(userPrompt: string) {
           return { success: true, data: text };
         }
 
-        // Log error
-        const errorBody = await response.text();
-        console.error(`SERVER: Model ${model} failed with status ${response.status}. Details:`, errorBody);
-
         if (response.status === 429) {
           await delay(2000);
           attempts++;
           continue;
         }
-
-        // If 404/400, break to next model
-        if (response.status === 404 || response.status === 400) {
-          break; 
-        }
-
+        
+        if (response.status === 404 || response.status === 400) break; 
         throw new Error(`API Error: ${response.status}`);
 
       } catch (e) {
@@ -193,5 +185,5 @@ export async function generateHabitPlan(userPrompt: string) {
     }
   }
   
-  return { error: "Failed to connect to Google AI. Check server terminal for 'DIAGNOSTIC ERROR'." };
+  return { error: "Connection to AI failed. Please try again." };
 }

@@ -1,14 +1,13 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
-import { Award, Lock, Star } from "lucide-react";
+import { Award, Lock } from "lucide-react";
+import Image from "next/image";
 
-// Same formula as UserProfile to ensure consistency
 const getLevel = (xp: number) => Math.floor(Math.pow(xp / 100, 0.5)) + 1;
 
 export function BadgesWidget({ user }: { user: User }) {
@@ -31,7 +30,6 @@ export function BadgesWidget({ user }: { user: User }) {
     
     fetchLevel();
 
-    // Realtime listener for level updates
     const channel = supabase
       .channel(`badges_widget:${user.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.id}` }, 
@@ -41,15 +39,11 @@ export function BadgesWidget({ user }: { user: User }) {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // Badge Logic
   const nextBadgeLevel = Math.ceil((level + 1) / 5) * 5;
   const levelsToGo = nextBadgeLevel - level;
   const currentBadgeCount = Math.floor(level / 5);
   
-  // Calculate progress specifically towards the next badge (e.g. Level 7 is 40% of the way from 5 to 10)
   const progressToNextBadge = ((5 - levelsToGo) / 5) * 100;
-
-  // Generate displayed badges
   const earnedBadges = Array.from({ length: currentBadgeCount }, (_, i) => (i + 1) * 5);
 
   if (loading) return <Card className="h-[200px] animate-pulse bg-muted" />;
@@ -65,7 +59,6 @@ export function BadgesWidget({ user }: { user: User }) {
       <CardContent>
         <div className="space-y-4">
           
-          {/* Upcoming Badge Progress */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Next Badge: <span className="font-bold text-foreground">Level {nextBadgeLevel}</span></span>
@@ -74,24 +67,33 @@ export function BadgesWidget({ user }: { user: User }) {
             <Progress value={progressToNextBadge} className="h-2" />
           </div>
 
-          {/* Badge Showcase */}
+          {/* Badge Showcase Grid */}
           <div className="grid grid-cols-4 gap-2 pt-2">
             {/* Render Earned Badges */}
             {earnedBadges.map((badgeLevel) => (
-              <div key={badgeLevel} className="flex flex-col items-center gap-1" title={`Reached Level ${badgeLevel}`}>
-                <div className="h-10 w-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center border-2 border-yellow-500 text-yellow-600">
-                    <Star className="h-5 w-5 fill-yellow-500" />
+              <div key={badgeLevel} className="flex flex-col items-center gap-1 group relative" title={`Reached Level ${badgeLevel}`}>
+                <div className="h-12 w-12 relative transition-transform group-hover:scale-110">
+                    {/* FIX: Added 'rounded-full' and 'overflow-hidden' to wrapper */}
+                    {/* Added 'object-cover' to image to ensure it fills the circle */}
+                    <div className="w-full h-full rounded-full overflow-hidden relative border-2 border-yellow-500/20 shadow-sm">
+                        <Image 
+                            src={`/badges/badge-${badgeLevel}.png`} 
+                            alt={`Level ${badgeLevel} Badge`}
+                            fill
+                            className="object-cover"
+                        />
+                    </div>
                 </div>
-                <span className="text-[10px] font-bold">Lvl {badgeLevel}</span>
+                <span className="text-[10px] font-bold text-yellow-600">Lvl {badgeLevel}</span>
               </div>
             ))}
 
             {/* Render Next Locked Badge */}
-            <div className="flex flex-col items-center gap-1 opacity-50">
-                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center border-2 border-dashed border-muted-foreground">
-                    <Lock className="h-4 w-4" />
+            <div className="flex flex-col items-center gap-1 opacity-50 grayscale">
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
+                    <Lock className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <span className="text-[10px] font-bold">Lvl {nextBadgeLevel}</span>
+                <span className="text-[10px] font-bold text-muted-foreground">Lvl {nextBadgeLevel}</span>
             </div>
           </div>
 

@@ -1,19 +1,19 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Trophy, ArrowRight } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-// Updated Type
 type Profile = { 
     id: string; 
     email: string; 
     xp: number; 
-    display_name: string | null; // Added
+    display_name: string | null;
+    avatar_image: string | null; // Added field
 };
 
 export function LeaderboardWidget() {
@@ -23,7 +23,7 @@ export function LeaderboardWidget() {
     const fetchLeaders = async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("id, email, xp, display_name") // Added display_name
+        .select("id, email, xp, display_name, avatar_image") // Fetch image
         .order("xp", { ascending: false })
         .limit(5); 
       
@@ -36,7 +36,6 @@ export function LeaderboardWidget() {
     return () => clearInterval(interval);
   }, []);
 
-  // Helper
   const getName = (p: Profile) => p.display_name || p.email.split("@")[0];
 
   return (
@@ -63,7 +62,9 @@ export function LeaderboardWidget() {
                       index === 2 ? 'bg-orange-100 text-orange-700' : 'bg-muted text-muted-foreground'}`}>
                   {index + 1}
                 </div>
-                <Avatar className="h-8 w-8">
+                <Avatar className="h-8 w-8 border border-white/10">
+                   {/* FIX: Render Avatar Image */}
+                  {user.avatar_image && <AvatarImage src={`/avatars/${user.avatar_image}`} className="object-cover" />}
                   <AvatarFallback className="text-xs">
                     {getName(user).substring(0, 2).toUpperCase()}
                   </AvatarFallback>

@@ -4,19 +4,26 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Use AvatarImage
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-// Removed unused Label import
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BadgesWidget } from "@/components/dashboard/BadgesWidget";
-import { CheckCircle2, Zap, Edit2, Save } from "lucide-react"; // Removed Trophy
+import { CheckCircle2, Zap, Edit2, Save, Camera } from "lucide-react";
+import Image from "next/image";
 
-// Define proper type to replace 'any'
 interface ProfileData {
     id: string;
     display_name: string | null;
     xp: number;
+    avatar_image: string | null; // New field
 }
+
+// 1. Define your available avatars here (filenames in public/avatars/)
+const AVAILABLE_AVATARS = [
+  "avatar (1).png", "avatar (2).png", "avatar (3).png", "avatar (4).png",
+  "avatar (5).png"
+];
 
 export default function ProfilePage() {
   const [user, setUser] = useState<User | null>(null);
@@ -26,12 +33,11 @@ export default function ProfilePage() {
   
   const [isEditing, setIsEditing] = useState(false);
   const [newName, setNewName] = useState("");
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
-      // FIX: Changed getSession() to getUser() to fix type error
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) return;
       setUser(user);
 
@@ -57,27 +63,38 @@ export default function ProfilePage() {
             completedTasks: tasks.filter(t => t.is_complete).length
         });
       }
-
       setLoading(false);
     };
-
     fetchData();
   }, []);
 
   const handleUpdateName = async () => {
     if (!user || !newName.trim()) return;
-    
     const { error } = await supabase
         .from("profiles")
         .update({ display_name: newName })
         .eq("id", user.id);
 
     if (!error) {
-        // Update local state safely
         setProfileData(prev => prev ? { ...prev, display_name: newName } : null);
         setIsEditing(false);
     } else {
         alert("Failed to update name");
+    }
+  };
+
+  const handleUpdateAvatar = async (filename: string) => {
+    if (!user) return;
+    const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_image: filename })
+        .eq("id", user.id);
+
+    if (!error) {
+        setProfileData(prev => prev ? { ...prev, avatar_image: filename } : null);
+        setIsAvatarModalOpen(false);
+    } else {
+        alert("Failed to update avatar");
     }
   };
 
@@ -88,14 +105,52 @@ export default function ProfilePage() {
     <div className="max-w-4xl mx-auto space-y-8">
       
       {/* HEADER CARD */}
-      <Card className="border-l-4 border-l-primary">
-        <CardContent className="pt-6">
+      <Card className="border-l-4 border-l-primary relative overflow-hidden">
+        {/* Background decorative element */}
+        <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-primary/10 to-transparent pointer-events-none" />
+        
+        <CardContent className="pt-6 relative z-10">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
-                    <AvatarFallback className="text-3xl bg-primary/10 text-primary">
-                        {newName.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                </Avatar>
+                
+                {/* 2. Avatar Selection Trigger */}
+                <Dialog open={isAvatarModalOpen} onOpenChange={setIsAvatarModalOpen}>
+                  <DialogTrigger asChild>
+                    <div className="relative group cursor-pointer">
+                        <Avatar className="h-24 w-24 border-4 border-background shadow-lg transition-transform group-hover:scale-105">
+                            {/* Load custom avatar or fallback */}
+                            <AvatarImage src={`/avatars/${profileData?.avatar_image || 'avatar-1.png'}`} className="object-cover" />
+                            <AvatarFallback className="text-3xl bg-primary/10 text-primary">
+                                {newName.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                        {/* Overlay icon on hover */}
+                        <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Camera className="text-white h-8 w-8" />
+                        </div>
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Choose Your Avatar</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid grid-cols-4 gap-4 py-4">
+                        {AVAILABLE_AVATARS.map((avatarFile) => (
+                            <button 
+                                key={avatarFile}
+                                onClick={() => handleUpdateAvatar(avatarFile)}
+                                className={`relative rounded-full overflow-hidden aspect-square border-2 transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary ${profileData?.avatar_image === avatarFile ? 'border-primary ring-2 ring-primary/30' : 'border-transparent hover:border-primary/50'}`}
+                            >
+                                <Image 
+                                    src={`/avatars/${avatarFile}`} 
+                                    alt="Avatar" 
+                                    fill 
+                                    className="object-cover"
+                                />
+                            </button>
+                        ))}
+                    </div>
+                  </DialogContent>
+                </Dialog>
                 
                 <div className="flex-1 space-y-2">
                     {isEditing ? (
@@ -117,9 +172,9 @@ export default function ProfilePage() {
                     </div>
                 </div>
 
-                <div className="text-right">
-                    <div className="text-2xl font-bold text-primary">{profileData?.xp || 0} XP</div>
-                    <div className="text-sm text-muted-foreground">Total Experience</div>
+                <div className="text-right hidden md:block">
+                    <div className="text-3xl font-black text-primary drop-shadow-sm">{profileData?.xp || 0} XP</div>
+                    <div className="text-sm font-medium text-muted-foreground">Total Experience</div>
                 </div>
             </div>
         </CardContent>
@@ -127,7 +182,6 @@ export default function ProfilePage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
-        {/* STATS COLUMN */}
         <div className="space-y-6 md:col-span-2">
             <div className="grid grid-cols-2 gap-4">
                 <Card>
@@ -156,7 +210,6 @@ export default function ProfilePage() {
                 </Card>
             </div>
 
-            {/* QUEST HISTORY */}
             <Card>
                 <CardHeader>
                     <CardTitle>Recent Activity</CardTitle>
@@ -170,7 +223,6 @@ export default function ProfilePage() {
             </Card>
         </div>
 
-        {/* SIDEBAR: BADGES */}
         <div className="md:col-span-1">
             <BadgesWidget user={user} />
         </div>

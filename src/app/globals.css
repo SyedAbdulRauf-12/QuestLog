@@ -94,7 +94,7 @@
   --chart-5: oklch(0.5 0.15 190); /* Teal */
 
   /* Sidebar */
-  --sidebar: oklch(0.15 0.06 275); /* Slightly darker Navy */
+  --sidebar: oklch(19.48% 0.04261 21.764); /* Slightly darker Navy */
   --sidebar-foreground: oklch(0.98 0 0);
   --sidebar-primary: oklch(0.6 0.2 22);
   --sidebar-primary-foreground: oklch(0.98 0 0);

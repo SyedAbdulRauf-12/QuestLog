@@ -5,7 +5,7 @@ import Image from 'next/image';
 export default function Loading() {
   return (
     /* Changed bg-black to a deep dark red */
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#2a0505]">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#2f0d0d]">
       <style>{`
         @keyframes zoomInOut {
           0% { 
@@ -47,7 +47,7 @@ export default function Loading() {
       {/* The Logo Wrapper */}
       <div className="animate-logo">
         <Image 
-          src="/logo.png" 
+          src="/QuestLog_Logo.png" 
           alt="QuestLog Logo"
           width={220} 
           height={220}
