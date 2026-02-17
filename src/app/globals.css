@@ -1,21 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Removed @custom-variant dark as we are enforcing a single theme */
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -43,22 +33,14 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* --- THEME: Crimson Guard (Single Consistent Theme) --- */
-/* Palette:
-   #09122C (Deep Navy) -> oklch(0.18 0.06 275)
-   #872341 (Burgundy)  -> oklch(0.44 0.15 12)
-   #BE3144 (Vibrant Red) -> oklch(0.53 0.20 22)
-   #E17564 (Peach/Soft Red) -> oklch(0.70 0.14 39)
-*/
-
 :root {
   --radius: 0.75rem;
 
-  /* Background: Deep Navy */
-  --background: oklch(19.48% 0.04261 21.764); /* #09122C */
+  /* Background: Deep Navy (#09122C) */
+  --background: oklch(19.48% 0.04261 21.764); 
   --foreground: oklch(0.98 0 0);
 
-  /* Card: Slightly lighter Navy/Burgundy mix */
+  /* Card */
   --card: oklch(28.518% 0.062 21.727);
   --card-foreground: oklch(0.98 0 0);
 
@@ -87,22 +69,12 @@
   --ring: oklch(0.6 0.2 22);
 
   /* Charts */
-  --chart-1: oklch(0.6 0.2 22); /* Red */
-  --chart-2: oklch(0.70 0.14 39); /* Peach */
-  --chart-3: oklch(0.44 0.15 12); /* Burgundy */
-  --chart-4: oklch(0.65 0.22 65); /* Gold */
-  --chart-5: oklch(0.5 0.15 190); /* Teal */
-
-  /* Sidebar */
-  --sidebar: oklch(19.48% 0.04261 21.764); /* Slightly darker Navy */
-  --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.6 0.2 22);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.3 0.1 12);
-  --sidebar-accent-foreground: oklch(0.98 0 0);
-  --sidebar-border: oklch(0.3 0.05 275);
-  --sidebar-ring: oklch(0.6 0.2 22);
-}
+  --chart-1: oklch(0.6 0.2 22);
+  --chart-2: oklch(0.70 0.14 39);
+  --chart-3: oklch(0.44 0.15 12);
+  --chart-4: oklch(0.65 0.22 65);
+  --chart-5: oklch(0.5 0.15 190);
+} /* Fixed: Added missing closing brace for :root */
 
 @layer base {
   * {
@@ -119,7 +91,6 @@
   .glow-text {
     text-shadow: 0 0 4px var(--primary);
   }
-}
 
   .text-outline {
     text-shadow: 
@@ -128,13 +99,15 @@
       -1px  1px 0 #000,
        1px  1px 0 #000;
   }
-  @layer utilities {
+}
+
+@layer utilities {
   @keyframes zoom-in-out {
     0%, 100% {
       transform: scale(1);
     }
     50% {
-      transform: scale(1.15); /* Adjust this for more/less zoom */
+      transform: scale(1.15);
     }
   }
 

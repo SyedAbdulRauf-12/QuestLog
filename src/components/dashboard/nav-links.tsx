@@ -5,75 +5,41 @@ import { Button } from "@/components/ui/button";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Target,
+  Target, // Reverted to Target
   Trophy,
   Settings,
-  Users, // Imported Users icon
+  Users,
 } from "lucide-react";
 
-// We accept a prop to close the sheet when a link is clicked (mobile only)
 export function NavLinks({ onLinkClick }: { onLinkClick?: () => void }) {
   const pathname = usePathname();
   const isActive = (path: string) => pathname === path;
 
+  const navItems = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "The Void", href: "/dashboard/void", icon: Target },
+    { name: "Hall of Heroes", href: "/dashboard/hall-of-heroes", icon: Trophy },
+    { name: "The Guild", href: "/dashboard/guild", icon: Users },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  ];
+
   return (
-    <ul className="space-y-2">
-      <li>
-        <Link href="/dashboard" onClick={onLinkClick}>
-          <Button 
-            variant={isActive("/dashboard") ? "secondary" : "ghost"} 
-            className="w-full justify-start gap-2"
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            Dashboard
-          </Button>
-        </Link>
-      </li>
-      <li>
-        <Link href="/dashboard/planner" onClick={onLinkClick}>
-          <Button 
-            variant={isActive("/dashboard/planner") ? "secondary" : "ghost"} 
-            className="w-full justify-start gap-2"
-          >
-            <Target className="h-4 w-4" />
-            The Void
-          </Button>
-        </Link>
-      </li>
-      <li>
-        <Link href="/dashboard/leaderboard" onClick={onLinkClick}>
-          <Button 
-            variant={isActive("/dashboard/leaderboard") ? "secondary" : "ghost"} 
-            className="w-full justify-start gap-2"
-          >
-            <Trophy className="h-4 w-4" />
-            Hall of Heroes
-          </Button>
-        </Link>
-      </li>
-      {/* NEW GUILD LINK */}
-      <li>
-        <Link href="/dashboard/guild" onClick={onLinkClick}>
-          <Button 
-            variant={isActive("/dashboard/guild") ? "secondary" : "ghost"} 
-            className="w-full justify-start gap-2"
-          >
-            <Users className="h-4 w-4" />
-            The Guild
-          </Button>
-        </Link>
-      </li>
-      <li>
-        <Link href="/dashboard/settings" onClick={onLinkClick}>
-          <Button 
-            variant={isActive("/dashboard/settings") ? "secondary" : "ghost"} 
-            className="w-full justify-start gap-2"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </Button>
-        </Link>
-      </li>
+    <ul className="flex flex-row items-center gap-2">
+      {navItems.map((item) => (
+        <li key={item.href}>
+          <Link href={item.href} onClick={onLinkClick}>
+            <Button 
+              variant={isActive(item.href) ? "secondary" : "ghost"} 
+              className={`justify-start gap-2 h-9 px-3 ${
+                isActive(item.href) ? "text-red-900 font-bold" : "text-muted-foreground"
+              }`}
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="hidden lg:inline">{item.name}</span>
+            </Button>
+          </Link>
+        </li>
+      ))}
     </ul>
   );
 }
