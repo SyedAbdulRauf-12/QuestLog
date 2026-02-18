@@ -1,5 +1,5 @@
 import Link from "next/link";
-import AuthForm from "@/components/auth/auth-form";
+import AuthForm from "@/components/api/auth/AuthFormTemp";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 import { Suspense } from "react"; 
