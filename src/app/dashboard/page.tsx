@@ -139,17 +139,15 @@ export default function DashboardPage() {
 
   return (
     <div className="relative min-h-full">
-      {/* Removed Light Mode Background div - now uses global theme */}
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         
         {/* MODAL 1: DISCLAIMER */}
         <Dialog open={showDisclaimer} onOpenChange={setShowDisclaimer}>
-          <DialogContent className="sm:max-w-[500px] border-primary bg-card">
+          <DialogContent className="sm:max-w-[500px] border-yellow-500 bg-yellow-50 dark:bg-zinc-900 dark:border-yellow-600">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-primary">
+              <DialogTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-500">
                 <ShieldAlert className="h-6 w-6" />
-                QuestLog: The Honor Code
+                LevelUp Life: The Honor Code
               </DialogTitle>
               <DialogDescription className="pt-4 text-base text-foreground">
                 <strong>Welcome, Adventurer.</strong>
@@ -167,7 +165,7 @@ export default function DashboardPage() {
                   id="dont-show" 
                   checked={dontShowAgain}
                   onCheckedChange={(checked) => setDontShowAgain(checked as boolean)}
-                  className="border-primary data-[state=checked]:bg-primary text-primary-foreground"
+                  className="border-yellow-600 data-[state=checked]:bg-yellow-600 text-white"
                 />
                 <label
                   htmlFor="dont-show"
@@ -176,7 +174,7 @@ export default function DashboardPage() {
                   Do not show this again
                 </label>
               </div>
-              <Button onClick={handleAcceptDisclaimer} className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Button onClick={handleAcceptDisclaimer} className="w-full sm:w-auto bg-yellow-600 hover:bg-yellow-700 text-white">
                 I Accept the Challenge
               </Button>
             </DialogFooter>

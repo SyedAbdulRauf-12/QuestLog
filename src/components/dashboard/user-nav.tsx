@@ -20,7 +20,7 @@ export function UserNav() {
   const [email, setEmail] = useState("user@example.com");
   const [name, setName] = useState("User"); 
   const [initials, setInitials] = useState("U");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null); // New state
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -58,9 +58,10 @@ export function UserNav() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        {/* Updated Button to be flexible width and contain text */}
+        <Button variant="ghost" className="relative h-10 w-auto rounded-full px-2 flex items-center gap-2 hover:bg-muted/50">
+          <span className="hidden md:inline-block text-sm font-medium text-foreground">{name}</span>
           <Avatar className="h-8 w-8 border border-white/10">
-            {/* FIX: Display the custom avatar if available */}
             {avatarUrl && <AvatarImage src={avatarUrl} alt={name} className="object-cover" />}
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
